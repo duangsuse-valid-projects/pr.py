@@ -6,7 +6,6 @@ Random utility for Chinese random text generation (token viewing)
 
 author: duangsuse
 '''
-
 import typing
 typing.TYPE_CHECKING = True
 from typing import Any, AnyStr, Callable, Union, TypeVar, cast
@@ -47,6 +46,24 @@ def appendAll(dst: List[E], src: Iterable[Iterable[E]]):
   for xs in src:
     for x in xs:
       dst.append(x)
+def zip_with_next(iter):
+  gotc = 0
+  try:
+    while True:
+      me = iter.__next__(); gotc += 1
+      nxt = iter.__next__(); gotc += 1
+      yield (me, nxt)
+  except StopIteration:
+    if gotc % 2 != 0: yield me
+def zip_with_next_sticky(iter):
+  try:
+    left = iter.__next__()
+    while True:
+      right = iter.__next__()
+      restup = (left, right)
+      left = right
+      yield restup
+  except StopIteration: pass
 def pick(xs): return sample(xs, 1)[0]
 def ratioly(r, f):
   if randint(0,100) < r: return f()
@@ -415,7 +432,7 @@ app.add_argument('--line-max', '-lines', type=int, help=f'Generate with max line
 app.add_argument('--file', '-f', type=str, help=f'Use input file path (default {filename})')
 app.add_argument('--debug', '-dbg', help='Show intrinsics', action='store_true')
 app.add_argument('--quiet', '-q', help='Be quiet (QUIET=1)', action='store_true')
-app.add_argument('action', type=str, nargs='+', help='Actions (char/lexical/autosplit(split)/wkinds/smart/loop)')
+app.add_argument('action', type=str, nargs='+', help='Actions (char/lexical/autosplit(split)/printwords/wkinds/smart/loop)')
 
 grp_l = app.add_argument_group('lexical generator')
 grp_l.add_argument('-llen', type=int, help='Length ratio', default=2)
@@ -439,26 +456,6 @@ grp_rule.add_argument('-metadict', type=str, help='Path for meta dictionary')
 grp_rule.add_argument('-route-a', type=str, help='Normal succeeder in statement')
 grp_rule.add_argument('-route-b', type=str, help='Branch succeeder in statement')
 
-def zip_with_next(iter):
-  gotc = 0
-  try:
-    while True:
-      me = iter.__next__(); gotc += 1
-      nxt = iter.__next__(); gotc += 1
-      yield (me, nxt)
-  except StopIteration:
-    if gotc % 2 != 0: yield me
-
-def zip_with_next_sticky(iter):
-  try:
-    left = iter.__next__()
-    while True:
-      right = iter.__next__()
-      restup = (left, right)
-      left = right
-      yield restup
-  except StopIteration: pass
-
 def read_dicts(args): #well done, dear Python *3*
   global metawordclz, semt_succeeder, semt_branch
   md, da, db = (args.metadict, args.route_a, args.route_b)
@@ -475,10 +472,6 @@ def read_dicts(args): #well done, dear Python *3*
       code = f.read()
       semt_branch = brl_code(code, keyedf=meta_keyed, itemf=meta_value)
 
-
-deps = '''
-loop<smart<wkinds<split<autosplit<lexical<char
-'''
 def loop(**ts):
   line = ''
   try:
@@ -492,6 +485,23 @@ def loop(**ts):
     loop(**ts)
   except KeyboardInterrupt:
     print('bye')
+
+deps = '''
+lexical<char
+split<autosplit<lexical
+printwords<lexical
+loop<smart<wkinds<lexical
+'''
+def satisfy_deps(acts, depcode, dbg=False):
+  for rule in depcode.strip().split('\n'):
+    for me, dep in zip_with_next_sticky(iter(rule.strip().split('<'))):
+      if dbg: print(f'Testing if ({me} < {dep}) is satisfied')
+      if me in acts and dep not in acts:
+        if dbg: print(f'{dep} is required to run {me}')
+        acts.append(dep)
+  acts.reverse() #dep first!
+  # (user-defined order is not important because this application uses serial excatly-once operation)
+
 def main(argv):
   global ShowWordClass, LEN, QUIET, filename
   args = app.parse_args(argv)
@@ -506,13 +516,8 @@ def main(argv):
   read_dicts(args)
   acts = args.action
   if args.debug: print(acts)
-  for me, dep in zip_with_next_sticky(iter(deps.strip().split('<'))):
-    if args.debug: print(f'Testing if {me} < {dep} is satisfied')
-    if me in acts and dep not in acts:
-      if args.debug: print(f'{dep} is required to run {me}')
-      acts.append(dep)
-  acts.reverse()
-  if args.debug: print(deps, acts)
+  satisfy_deps(acts, deps, dbg=args.debug)
+  if args.debug: print(deps.strip(), acts, sep='; ')
   if 'help' in acts:
     print(app.format_help()); return
   if len(acts) != 0:
@@ -525,8 +530,9 @@ def main(argv):
   if 'lexical' in acts:
     sws, dd = cut_lines(lns)
     counted = stat_words(sws)
-    banner('Lexical Based', 35)
     worda = list(map(it0, counted))
+  if 'printwords' in acts:
+    banner('Lexical Based', 35)
     print(''.join(worda))
   if 'autosplit' in acts:
     banner('Autosplit', 34)
