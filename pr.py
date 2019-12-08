@@ -19,8 +19,8 @@ from os import environ
 from sys import stdout, argv
 from argparse import ArgumentParser
 
-from time import perf_counter
-from random import sample, randint
+from time import perf_counter, time
+from random import sample, randint, seed
 
 from pandas import DataFrame
 from jieba import lcut, get_dict_file
@@ -432,6 +432,8 @@ app.add_argument('--line-max', '-lines', type=int, help=f'Generate with max line
 app.add_argument('--file', '-f', type=str, help=f'Use input file path (default {filename})')
 app.add_argument('--debug', '-dbg', help='Show intrinsics', action='store_true')
 app.add_argument('--quiet', '-q', help='Be quiet (QUIET=1)', action='store_true')
+app.add_argument('--use-srand', help='Use random seed', action='store_true')
+app.add_argument('--srand', type=str, help='Repeat using random seed', default='hello')
 app.add_argument('action', type=str, nargs='+', help='Actions (char/lexical/autosplit(split)/printwords/wkinds/smart/loop)')
 
 grp_l = app.add_argument_group('lexical generator')
@@ -515,6 +517,13 @@ def main(argv):
   rbk, rbad, rbegcls = (args.rbk, args.rbad, args.rbegcls)
   read_dicts(args)
   acts = args.action
+  if args.use_srand:
+    rand_seed = repr(time())
+    print(f'Random seed {rand_seed}')
+    seed(rand_seed)
+  if args.srand:
+    print(f'Using seed {args.srand}')
+    seed(args.srand)
   if args.debug: print(acts)
   satisfy_deps(acts, deps, dbg=args.debug)
   if args.debug: print(deps.strip(), acts, sep='; ')
